@@ -1,5 +1,5 @@
-import { useEffect, useContext, useRef } from 'react'
-import { useDispatch, useSelector } from 'react-redux'
+import { useCallback, useEffect, useRef } from 'react'
+import { useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import qs from 'qs'
 
@@ -12,22 +12,30 @@ import {
   setCategoryId,
   setCurrentPage,
   setFilters,
-} from '../redux/slices/filterSlice'
-import { fetchPizzas } from '../redux/slices/pizzaSlice'
+} from '../redux/filter/slice'
+import { useAppDispatch } from '../redux/store'
+import { selectFilter } from '../redux/filter/selectors'
+import { selectPizzaData } from '../redux/pizza/selectors'
+import { SearchPizzaParams } from '../redux/pizza/types'
+import { fetchPizzas } from '../redux/pizza/asyncActions'
+import { FilterSliceState } from '../redux/filter/types'
 
-const Home = () => {
+const Home: React.FC = () => {
   const navigate = useNavigate()
-  const dispatch = useDispatch()
+  const dispatch = useAppDispatch()
   const isSearch = useRef(false)
   const isMounted = useRef(false)
 
-  const { categoryId, sort, currentPage, searchValue } = useSelector(
-    (state) => state.filter
-  )
-  const { items, status } = useSelector((state) => state.pizza)
+  const { categoryId, sort, currentPage, searchValue } =
+    useSelector(selectFilter)
+  const { items, status } = useSelector(selectPizzaData)
 
-  const onChangePage = (number) => {
-    dispatch(setCurrentPage(number))
+  const onChangeCategoryId = useCallback((id: number) => {
+    dispatch(setCategoryId(id))
+  }, [])
+
+  const onChangePage = (page: number) => {
+    dispatch(setCurrentPage(page))
   }
 
   const getPizzas = async () => {
@@ -35,8 +43,16 @@ const Home = () => {
     const sortBy = sort.sortProperty.replace('-', '')
     const order = sort.sortProperty.includes('-') ? 'asc' : 'desc'
     const search = searchValue ? `search=${searchValue}` : ''
-
-    dispatch(fetchPizzas({ currentPage, category, sortBy, order, search }))
+    console.log(currentPage)
+    dispatch(
+      fetchPizzas({
+        currentPage: String(currentPage),
+        category,
+        sortBy,
+        order,
+        search,
+      })
+    )
   }
   // Если изменили параметры и был первый рендер
   useEffect(() => {
@@ -55,8 +71,16 @@ const Home = () => {
   useEffect(() => {
     if (window.location.search) {
       const params = qs.parse(window.location.search.substring(1))
-      const sort = list.find((obj) => obj.sortProperty === params.sortProperty)
-      dispatch(setFilters({ ...params, sort }))
+      const sort = list.find((obj) => obj.sortProperty === params.sortBy)
+
+      dispatch(
+        setFilters({
+          searchValue: params.search,
+          categoryId: Number(params.categoryId),
+          currentPage: Number(params.currentPage),
+          sort: sort || list[0],
+        } as FilterSliceState)
+      )
       isSearch.current = true
     }
   }, [])
@@ -67,18 +91,15 @@ const Home = () => {
     }
 
     isSearch.current = false
-  }, [categoryId, searchValue, currentPage, sort.sortProperty, sort.order])
+  }, [categoryId, searchValue, currentPage, sort.sortProperty])
 
-  const pizzas = items.map((obj) => <PizzaBlock key={obj.id} {...obj} />)
+  const pizzas = items.map((obj: any) => <PizzaBlock key={obj.id} {...obj} />)
 
   return (
     <div className="container">
       <div className="content__top">
-        <Categories
-          value={categoryId}
-          onClickCategoty={(id) => dispatch(setCategoryId(id))}
-        />
-        <Sort />
+        <Categories value={categoryId} onClickCategoty={onChangeCategoryId} />
+        <Sort value={sort} />
       </div>
       <h2 className="content__title">Все пиццы</h2>
       {status === 'error' ? (
